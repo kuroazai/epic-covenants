@@ -13,6 +13,8 @@ import os
 import keyboard
 import pandas as pd
 from dataclasses import dataclass
+from pywinauto.findwindows import find_window
+from pywinauto.win32functions import SetForegroundWindow
 
 
 @dataclass
@@ -43,6 +45,8 @@ class Config():
     farm_mystic: bool = False
     farm_friendship: bool = False
 
+    logging: bool = False
+
     def setup_bluestacks(self):
         win = pygetwindow.getWindowsWithTitle(self.instances[0])[0]
         win.size = (960, 555)
@@ -69,26 +73,24 @@ class DataCollector():
     gold_spent: int = 0
     bookmarks: int = 0
     mystics: int = 0
+
     datastore = {'Covenants': 0,
                  'Mystics': 0}
 
-    def __init__(self):
-        # check if file exists
+    def save(self):
         filename = 'covenant_tracker.csv'
 
         if os.path.exists(filename):
             self.df = pd.read_csv(filename)
         else:
-            # load csv if exists
             self.df = pd.DataFrame.from_dict(self.datastore)
 
-    def save(self):
-        # convert to df
         self.df = self.df.append(self.datastore,
                                  ignore_index=True)
-        header = ["Covenants"]
 
-        self.df.to_csv('covenant_tracker.csv', columns = header)
+        header = ["Covenants"]
+        self.df.to_csv('covenant_tracker.csv',
+                       columns=header)
         self.datastore = {'Covenants': 0,
                           'Mystics': 0}
 
@@ -100,7 +102,7 @@ def check_frienship():
             x, y = pyautogui.locateCenterOnScreen(path,
                                                   confidence=0.9,
                                                   )
-            buy_mystic(x, y)
+            buy_friendship(x, y)
             break
         scroll_down()
 
@@ -168,6 +170,16 @@ def buy_mystic(x, y):
         LOGGER.save()
 
 
+def buy_friendship(x, y):
+    pyautogui.click(x + CFG.x_offset, y + CFG.y_offset)
+    time.sleep(0.35)
+    path = PM.find_image('buy.png')
+    if (pyautogui.locateOnScreen(path) is not None):
+        x, y = pyautogui.locateCenterOnScreen(path,
+                                              confidence=0.75)
+        pyautogui.click(x, y)
+
+
 def refresh_store():
     while True:
         if keyboard.is_pressed("q"):
@@ -187,11 +199,12 @@ def refresh_store():
                 time.sleep(0.05)
                 pyautogui.click(x, y)
                 return
-        except:
+        except Exception as ValueError:
             pass
 
 
 def bring_to_front():
+    SetForegroundWindow(find_window(title=CFG.instances[0]))
     pyautogui.click(CFG.active_win_x, CFG.active_win_y)
 
 
@@ -206,14 +219,18 @@ def scroll_up():
 def main():
     while CFG.expendable_gems > 0:
         os.system('cls')
-        c_avg = LOGGER.df['Covenants'].sum() / len(LOGGER.df['Covenants'])
-        # m_avg = LOGGER.df['Mystics'].sum() / len(LOGGER.df['Mystics'])
-        # f_avg = LOGGER.df['Covenants'].sum() / len(LOGGER.df['Covenants'])
 
-        print('\n\ntotal gems spent {}'.format(LOGGER.gems_spent),
-              '\nbookmarks acquired {}'.format(LOGGER.bookmarks),
-              '\nAverage rolls per bookmark', c_avg)
+        if CFG.logging:
+            c_avg = LOGGER.df['Covenants'].sum() / len(LOGGER.df['Covenants'])
+            # m_avg = LOGGER.df['Mystics'].sum() / len(LOGGER.df['Mystics'])
+            # f_avg = LOGGER.df['Covenants'].sum() / len(LOGGER.df['Covenants'])
+
+            print('\n\ntotal gems spent {}'.format(LOGGER.gems_spent),
+                  '\nbookmarks acquired {}'.format(LOGGER.bookmarks),
+                  '\nAverage rolls per bookmark', c_avg)
+
         bring_to_front()
+
         if CFG.farm_friendship:
             check_frienship()
         if CFG.farm_covenant:
@@ -227,12 +244,14 @@ def main():
 
         if keyboard.is_pressed("q"):
             break
+
         refresh_store()
         CFG.expendable_gems -= 3
 
         time.sleep(1)
 
-    LOGGER.save()
+    if CFG.logging:
+        LOGGER.save()
 
 
 if __name__ == "__main__":
